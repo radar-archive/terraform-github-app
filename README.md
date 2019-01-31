@@ -7,6 +7,27 @@ of `terraform plan` as a comment to the PR.
 In the PR you can then comment `!apply` to run `terraform apply`. The app will post the results of `terraform apply`
 and in case of a successful apply, merge the PR, otherwise another comment will be posted describing the failure.
 
+## Design & Flow
+
+1. User alters infrastructure within the terraform code, and creates a PR in the `terraform` repository.
+2. Github Enterprise sends a webhook containing the [PullRequestEvent](https://developer.github.com/v3/activity/events/types/#pullrequestevent)
+   - whose action is `opened` - to the Terraform Github App (hosted on a machine in azure) 
+3. The Terraform Github App Server pulls the PR from Github
+4. `terraform validate` is run on the pulled code. 
+  a. In the case of an error, the github app comments on the PR with the error.
+  b. In the case of success, the github app runs a `terraform plan`
+    1. in the case of success, the github app comments on the PR with the results.
+    2. in the case of error, the github app comments on the PR with the results of the error.
+5. User sees that `terraform plan` is as expected, and comments `terraform apply` or `!apply` 
+   a. If the result is not as expected, the flow starts again, except the Github App will listen for `edited`
+6. Github Enterprise sends a webhook containing the [PullRequestReviewCommentEvent](https://developer.github.com/v3/activity/events/types/#pullrequestreviewcommentevent)
+   - whose action is `created` - to the Terraform Github App
+7. The terraform Github App performs the `terraform apply`
+  a. In the case of success, the github app comments on the PR with the results, and then merges the PR
+  b. In the case of error, the github app comments on the PR with the results.
+
+
+
 ## Setting up your dev environment and Testing
 
 Please follow the instructions on [this guide](https://developer.github.com/enterprise/2.15/apps/quickstart-guides/setting-up-your-development-environment/)
