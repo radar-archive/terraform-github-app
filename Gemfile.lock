@@ -6,6 +6,7 @@ GEM
     dotenv (2.5.0)
     faraday (0.15.3)
       multipart-post (>= 1.2, < 3)
+    git (1.5.0)
     jwt (2.1.0)
     multipart-post (2.0.0)
     mustermann (1.0.3)
@@ -30,9 +31,10 @@ PLATFORMS
 
 DEPENDENCIES
   dotenv
+  git
   jwt (~> 2.1)
   octokit (~> 4.0)
   sinatra (~> 2.0)
 
 BUNDLED WITH
-   1.17.1
+   1.17.2

@@ -1,11 +1,14 @@
 require 'sinatra'
 require 'octokit'
+require 'git'
 require 'dotenv/load' # Manages environment variables
 require 'json'
 require 'openssl'     # Verifies the webhook signature
 require 'jwt'         # Authenticates a GitHub App
 require 'time'        # Gets ISO 8601 representation of a Time object
 require 'logger'      # Logs debug statements
+require 'securerandom'
+require 'open3'
 
 set :port, 3000
 set :bind, '0.0.0.0'
@@ -45,6 +48,15 @@ class GHAapp < Sinatra::Application
     set :logging, Logger::DEBUG
   end
 
+  Git.configure do |config|
+    # if we need to do some configurations for the git client
+  end
+
+
+  Octokit.configure do |c|
+    c.api_endpoint = "https://github.inradar.net/api/v3/"
+  end
+
 
   # Before each request to the `/event_handler` route
   before '/event_handler' do
@@ -62,11 +74,67 @@ class GHAapp < Sinatra::Application
     # ADD YOUR CODE HERE  #
     # # # # # # # # # # # #
 
+    case request.env['HTTP_X_GITHUB_EVENT']
+    when 'pull_request'
+      if @payload['action'] === 'opened' or @payload['action'] === 'reopened'
+        repo_name = @payload['repository']['name']
+        clone_url = @payload['repository']['clone_url']
+        dest_dir = "/tmp/#{SecureRandom.urlsafe_base64(6)}"
+        logger.debug dest_dir
+        g = gitClone(clone_url, repo_name, dest_dir)
+        gitPull(g)
+        checkoutBranch(g, @payload['pull_request']['head']['ref'])
+        stdout, status = terraformValidate("#{dest_dir}/#{repo_name}")
+        stdout = ":shipit:" if stdout.nil? || stdout.empty?
+        options = { event: status == 0 ? 'APPROVE' : 'REQUEST_CHANGES', body: stdout, comments: [] }
+        @installation_client.create_pull_request_review(@payload['repository']['full_name'],
+                                                         @payload['pull_request']['number'], options)
+      end
+
+      if @payload['action'] === 'closed'
+        if @payload['merged']
+          # PR merged
+        else
+          # PR closed without merged
+          logger.debug "we've closed a pull request without merging!"
+        end
+      end
+    end
+
     200 # success status
   end
 
 
   helpers do
+
+    def gitClone(clone_url, name, dest_dir)
+      g = Git.clone(clone_url, name, :path => dest_dir)
+      g
+    end
+
+    def gitPull(g)
+      g.fetch
+      g.pull
+    end
+
+    def checkoutBranch(g, branch_name)
+      g.checkout(branch_name)
+    end
+
+    def terraformValidate(dir)
+
+      stdout, status = Open3.capture2('/usr/local/bin/terraform', 'init', :chdir=>dir)
+      logger.debug stdout
+
+      if status != 0
+        return stdout, status
+      end
+
+      stdout, status = Open3.capture2('/usr/local/bin/terraform', 'validate', :chdir=>dir)
+      logger.debug stdout
+      return stdout, status
+
+    end
 
     # # # # # # # # # # # # # # # # #
     # ADD YOUR HELPER METHODS HERE  #
@@ -89,7 +157,7 @@ class GHAapp < Sinatra::Application
     # Instantiate an Octokit client authenticated as a GitHub App.
     # GitHub App authentication requires that you construct a
     # JWT (https://jwt.io/introduction/) signed with the app's private key,
-    # so GitHub can be sure that it came from the app an not altererd by
+    # so GitHub can be sure that it came from the app an not altered by
     # a malicious third party.
     def authenticate_app
       payload = {
