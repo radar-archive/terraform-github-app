@@ -29,7 +29,7 @@ and in case of a successful apply, merge the PR, otherwise another comment will 
 ## Deployment
 
 This app should exist on a physical computer that lives either in the NYC or SD office, 
-with the hostname `terraform-github-app.[eastus|westus]`.`inradar.net`. Since this is an app which directly deals with infrastructure,
+with the hostname `terraform-github-app.[eastus|westus].inradar.net`. Since this is an app which directly deals with infrastructure,
 this host should exist _outside_ of terraform, and be initialized via scripts.
 
 ## Setting up your dev environment and Testing
