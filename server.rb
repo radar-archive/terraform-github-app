@@ -80,12 +80,15 @@ class GHAapp < Sinatra::Application
         repo_name = @payload['repository']['name']
         clone_url = @payload['repository']['clone_url']
         dest_dir = "/tmp/#{SecureRandom.urlsafe_base64(6)}"
+
+        clone_url.sub! "https://", "https://terraform-builder-test-app:#{@installation_token}@"
+
         logger.debug dest_dir
         g = gitClone(clone_url, repo_name, dest_dir)
         gitPull(g)
         checkoutBranch(g, @payload['pull_request']['head']['ref'])
         stdout, status = terraformValidate("#{dest_dir}/#{repo_name}")
-        stdout = ":shipit:" if stdout.nil? || stdout.empty?
+        stdout = ":shipit:" if status == 0
         options = { event: status == 0 ? 'APPROVE' : 'REQUEST_CHANGES', body: stdout, comments: [] }
         @installation_client.create_pull_request_review(@payload['repository']['full_name'],
                                                          @payload['pull_request']['number'], options)
@@ -123,14 +126,14 @@ class GHAapp < Sinatra::Application
 
     def terraformValidate(dir)
 
-      stdout, status = Open3.capture2('/usr/local/bin/terraform', 'init', :chdir=>dir)
+      stdout, status = Open3.capture2('/usr/local/bin/terraform', 'init', '-var-file=/home/terraform/terraform/terraform.tfvars', :chdir=>dir)
       logger.debug stdout
 
       if status != 0
         return stdout, status
       end
 
-      stdout, status = Open3.capture2('/usr/local/bin/terraform', 'validate', :chdir=>dir)
+      stdout, status = Open3.capture2('/usr/local/bin/terraform', 'validate', '-var-file=/home/terraform/terraform/terraform.tfvars', :chdir=>dir)
       logger.debug stdout
       return stdout, status
 
